@@ -17,7 +17,7 @@ A REST API built with Laravel 13 for managing online courses.
 
 ### 1. Clone the Repository
 ```bash
-git clone <repository-url>
+git clone https://github.com/Mavrou/course_assignment.git
 cd course_assignment
 ```
 
