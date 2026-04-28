@@ -1,0 +1,598 @@
+openapi: 3.0.0
+info:
+  title: Course Assignment API
+  description: REST API for managing online courses with support for course status tracking and premium classification.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Local Development Server
+  - url: https://api.example.com/api/v1
+    description: Production Server
+
+tags:
+  - name: Courses
+    description: Course management endpoints
+
+paths:
+  /courses:
+    get:
+      tags:
+        - Courses
+      summary: List all courses with pagination
+      description: Retrieve a paginated list of all courses. Supports custom page size limit (max 100 per page).
+      operationId: listCourses
+      parameters:
+        - name: per_page
+          in: query
+          description: Number of courses per page (default 15, max 100)
+          required: false
+          schema:
+            type: integer
+            default: 15
+            minimum: 1
+            maximum: 100
+          example: 15
+        - name: page
+          in: query
+          description: Page number for pagination
+          required: false
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+          example: 1
+      responses:
+        '200':
+          description: Successfully retrieved courses list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Course'
+                  pagination:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                        example: 50
+                        description: Total number of courses
+                      per_page:
+                        type: integer
+                        example: 15
+                        description: Courses per page
+                      current_page:
+                        type: integer
+                        example: 1
+                        description: Current page number
+                      last_page:
+                        type: integer
+                        example: 4
+                        description: Last page number
+              examples:
+                success:
+                  summary: Successful courses list retrieval
+                  value:
+                    data:
+                      - id: 1
+                        course_title: PHP Fundamentals
+                        course_description: Learn PHP basics and advanced concepts
+                        status: published
+                        is_premium: false
+                        created_at: '2025-04-26T10:30:00Z'
+                        updated_at: '2025-04-26T10:30:00Z'
+                      - id: 2
+                        course_title: Advanced Laravel
+                        course_description: Master Laravel framework development
+                        status: published
+                        is_premium: true
+                        created_at: '2025-04-27T14:20:00Z'
+                        updated_at: '2025-04-27T14:20:00Z'
+                      - id: 3
+                        course_title: Database Design
+                        course_description: null
+                        status: pending
+                        is_premium: false
+                        created_at: '2025-04-28T08:15:00Z'
+                        updated_at: '2025-04-28T08:15:00Z'
+                    pagination:
+                      total: 50
+                      per_page: 15
+                      current_page: 1
+                      last_page: 4
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidPageSize:
+                  summary: Invalid page size parameter
+                  value:
+                    error: Page size cannot exceed 100
+
+    post:
+      tags:
+        - Courses
+      summary: Create a new course
+      description: Create a new course with provided course details. All fields are required except course_description.
+      operationId: createCourse
+      requestBody:
+        description: Course data to create
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CourseInput'
+            examples:
+              basic:
+                summary: Basic course creation
+                value:
+                  course_title: Python Fundamentals
+                  course_description: Learn Python programming basics
+                  status: published
+                  is_premium: false
+              premium:
+                summary: Premium course creation
+                value:
+                  course_title: Advanced Machine Learning
+                  course_description: Deep dive into ML algorithms and implementations
+                  status: published
+                  is_premium: true
+              pending:
+                summary: Pending course creation
+                value:
+                  course_title: Web Security Masterclass
+                  course_description: null
+                  status: pending
+                  is_premium: false
+      responses:
+        '201':
+          description: Course created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Course'
+                  message:
+                    type: string
+                    example: Course created successfully
+              examples:
+                success:
+                  summary: Successful course creation
+                  value:
+                    data:
+                      id: 51
+                      course_title: Python Fundamentals
+                      course_description: Learn Python programming basics
+                      status: published
+                      is_premium: false
+                      created_at: '2025-04-28T15:45:00Z'
+                      updated_at: '2025-04-28T15:45:00Z'
+                    message: Course created successfully
+        '400':
+          description: Validation error - invalid request body
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Validation error
+                  errors:
+                    type: object
+                    additionalProperties:
+                      type: array
+                      items:
+                        type: string
+              examples:
+                missingTitle:
+                  summary: Missing required course_title field
+                  value:
+                    error: 'The title field is required.'
+                invalidStatus:
+                  summary: Invalid status value
+                  value:
+                    error: 'The status field must be one of: published, pending.'
+                missingIsPremium:
+                  summary: Missing required is_premium field
+                  value:
+                    error: 'The is_premium field is required.'
+        '422':
+          description: Unprocessable Entity - validation failed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  errors:
+                    type: object
+                    additionalProperties:
+                      type: array
+                      items:
+                        type: string
+              examples:
+                validationErrors:
+                  summary: Multiple validation errors
+                  value:
+                    message: The given data was invalid.
+                    errors:
+                      course_title:
+                        - The title field is required.
+                      status:
+                        - The status field must be one of: published, pending.
+
+  /courses/{id}:
+    get:
+      tags:
+        - Courses
+      summary: Get a specific course by ID
+      description: Retrieve detailed information about a single course using its ID.
+      operationId: getCourse
+      parameters:
+        - name: id
+          in: path
+          description: Course ID
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+          example: 1
+      responses:
+        '200':
+          description: Course found and returned successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Course'
+              examples:
+                success:
+                  summary: Successful course retrieval
+                  value:
+                    data:
+                      id: 1
+                      course_title: PHP Fundamentals
+                      course_description: Learn PHP basics and advanced concepts
+                      status: published
+                      is_premium: false
+                      created_at: '2025-04-26T10:30:00Z'
+                      updated_at: '2025-04-26T10:30:00Z'
+        '404':
+          description: Course not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                notFound:
+                  summary: Course not found
+                  value:
+                    error: Course not found
+
+    patch:
+      tags:
+        - Courses
+      summary: Partially update a course
+      description: Update one or more fields of an existing course. Supports partial updates.
+      operationId: partialUpdateCourse
+      parameters:
+        - name: id
+          in: path
+          description: Course ID
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+          example: 1
+      requestBody:
+        description: Partial course data to update
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CourseInputPartial'
+            examples:
+              updateTitle:
+                summary: Update course title only
+                value:
+                  course_title: PHP Advanced Concepts
+              updateStatus:
+                summary: Update course status
+                value:
+                  status: pending
+              updateMultiple:
+                summary: Update multiple fields
+                value:
+                  course_title: Laravel Masterclass
+                  status: published
+                  is_premium: true
+      responses:
+        '200':
+          description: Course updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Course'
+                  message:
+                    type: string
+                    example: Course updated successfully
+              examples:
+                success:
+                  summary: Successful course update
+                  value:
+                    data:
+                      id: 1
+                      course_title: PHP Advanced Concepts
+                      course_description: Learn PHP basics and advanced concepts
+                      status: published
+                      is_premium: false
+                      created_at: '2025-04-26T10:30:00Z'
+                      updated_at: '2025-04-28T15:50:00Z'
+                    message: Course updated successfully
+        '404':
+          description: Course not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                notFound:
+                  summary: Course not found
+                  value:
+                    error: Course not found
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                type: object
+              examples:
+                invalidStatus:
+                  summary: Invalid status value
+                  value:
+                    error: 'The status field must be one of: published, pending.'
+
+    put:
+      tags:
+        - Courses
+      summary: Fully replace a course
+      description: Replace all fields of an existing course. All required fields must be provided.
+      operationId: fullUpdateCourse
+      parameters:
+        - name: id
+          in: path
+          description: Course ID
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+          example: 1
+      requestBody:
+        description: Complete course data to replace
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CourseInput'
+            examples:
+              fullUpdate:
+                summary: Full course replacement
+                value:
+                  course_title: Complete REST API Guide
+                  course_description: Learn everything about building REST APIs
+                  status: published
+                  is_premium: true
+      responses:
+        '200':
+          description: Course fully updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Course'
+                  message:
+                    type: string
+                    example: Course updated successfully
+              examples:
+                success:
+                  summary: Successful course full update
+                  value:
+                    data:
+                      id: 1
+                      course_title: Complete REST API Guide
+                      course_description: Learn everything about building REST APIs
+                      status: published
+                      is_premium: true
+                      created_at: '2025-04-26T10:30:00Z'
+                      updated_at: '2025-04-28T15:55:00Z'
+                    message: Course updated successfully
+        '404':
+          description: Course not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation error - missing required fields
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  errors:
+                    type: object
+
+    delete:
+      tags:
+        - Courses
+      summary: Delete a course (soft delete)
+      description: Delete (soft delete) a specific course. The record will be marked as deleted but not permanently removed from the database.
+      operationId: deleteCourse
+      parameters:
+        - name: id
+          in: path
+          description: Course ID to delete
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+          example: 1
+      responses:
+        '204':
+          description: Course successfully deleted (soft deleted)
+        '404':
+          description: Course not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                notFound:
+                  summary: Course not found
+                  value:
+                    error: Course not found
+        '500':
+          description: Server error during deletion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    Course:
+      type: object
+      description: Represents a course in the system
+      required:
+        - id
+        - course_title
+        - course_description
+        - status
+        - is_premium
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Unique course identifier
+          example: 1
+        course_title:
+          type: string
+          maxLength: 255
+          description: Title of the course
+          example: PHP Fundamentals
+        course_description:
+          type: string
+          nullable: true
+          description: Detailed description of the course
+          example: Learn PHP basics and advanced concepts
+        status:
+          type: string
+          enum:
+            - published
+            - pending
+          description: Current status of the course
+          example: published
+        is_premium:
+          type: boolean
+          description: Indicates if the course is a premium course
+          example: false
+        created_at:
+          type: string
+          format: date-time
+          description: Timestamp when the course was created
+          example: '2025-04-26T10:30:00Z'
+        updated_at:
+          type: string
+          format: date-time
+          description: Timestamp when the course was last updated
+          example: '2025-04-26T10:30:00Z'
+
+    CourseInput:
+      type: object
+      description: Required fields for creating or fully updating a course
+      required:
+        - course_title
+        - status
+        - is_premium
+      properties:
+        course_title:
+          type: string
+          maxLength: 255
+          minLength: 1
+          description: Title of the course (required)
+          example: PHP Fundamentals
+        course_description:
+          type: string
+          nullable: true
+          description: Detailed description of the course (optional, can be null)
+          example: Learn PHP basics and advanced concepts
+        status:
+          type: string
+          enum:
+            - published
+            - pending
+          description: Status of the course (required, must be published or pending)
+          example: published
+        is_premium:
+          type: boolean
+          description: Whether the course is premium (required)
+          example: false
+
+    CourseInputPartial:
+      type: object
+      description: Optional fields for partially updating a course
+      properties:
+        course_title:
+          type: string
+          maxLength: 255
+          description: Title of the course (optional for PATCH)
+          example: Updated Course Title
+        course_description:
+          type: string
+          nullable: true
+          description: Detailed description of the course (optional for PATCH)
+          example: Updated description
+        status:
+          type: string
+          enum:
+            - published
+            - pending
+          description: Status of the course (optional for PATCH)
+          example: published
+        is_premium:
+          type: boolean
+          description: Whether the course is premium (optional for PATCH)
+          example: true
+
+    ErrorResponse:
+      type: object
+      description: Standard error response
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message describing what went wrong
+          example: Course not found
